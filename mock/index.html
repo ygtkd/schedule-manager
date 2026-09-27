@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f7f7f4">
+<title>予定の自動管理アプリ · モック</title>
+<style>
+:root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#252a27;background:#e9eae6;line-height:1.6;--line:#d8dbd4;--green:#315844;--muted:#7b827b}
+*{box-sizing:border-box}body{margin:0}button,input,textarea{font:inherit;border-radius:0;color:inherit}button{cursor:pointer;-webkit-tap-highlight-color:transparent}button:disabled{opacity:.4}:focus-visible{outline:2px solid var(--green);outline-offset:4px}svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:square}
+.app{max-width:520px;margin:auto;background:#f7f7f4;height:100svh;height:100dvh;display:flex;flex-direction:column;position:relative;overflow:hidden}
+header{display:flex;justify-content:space-between;align-items:center;margin:0 24px;padding:calc(22px + env(safe-area-inset-top)) 0 18px;border-bottom:1px solid var(--line);flex-shrink:0}.brand{font-size:15px;font-weight:650;letter-spacing:.02em}.edition{font-size:10px;letter-spacing:.13em;color:var(--muted)}
+.pages{display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scrollbar-width:none;flex:1;min-height:0;overscroll-behavior-x:contain}.pages::-webkit-scrollbar{display:none}.page{flex:0 0 100%;width:100%;min-width:0;overflow-y:auto;scroll-snap-align:start;scroll-snap-stop:always;padding:27px 24px 28px;scrollbar-width:thin}
+.heading{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:29px}.heading h1{font-size:27px;letter-spacing:.06em;font-weight:500;margin:0}.number{font-family:Georgia,serif;font-size:13px;color:var(--muted)}
+.label-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}label{font-size:12px;font-weight:550}.count{font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}textarea{width:100%;height:235px;min-height:150px;resize:vertical;display:block;border:1px solid #bfc6bc;background:#fff;padding:17px;font-size:16px;line-height:1.9}textarea::placeholder{color:#a2a89e;font-size:14px}.input-actions{display:flex;justify-content:space-between;margin:9px 0 24px}.text-button{border:0;background:none;padding:10px 0;min-height:44px;font-size:11px;color:#697466}.primary{min-height:50px;width:100%;padding:12px 16px;border:1px solid var(--green);background:var(--green);color:white;font-size:13px;display:flex;align-items:center;justify-content:space-between}.primary:hover{background:#244735}.status{font-size:12px;color:var(--green);margin:14px 0 0}.status:empty{display:none}
+.section-head{display:flex;justify-content:space-between;align-items:center;padding-bottom:12px;border-bottom:1px solid var(--line);margin-top:32px}.section-head h2{font-size:12px;margin:0;font-weight:550}.section-head span{font-size:10px;color:var(--muted)}.source{display:flex;justify-content:space-between;padding:16px 0;border-bottom:1px solid var(--line);font-size:12px}.source span:last-child{font-size:10px;color:var(--muted)}
+.event{display:grid;grid-template-columns:43px 1fr;gap:15px;padding:20px 0;border-bottom:1px solid var(--line)}.date{border-top:2px solid var(--green);padding-top:7px;text-align:center;align-self:start}.date small{display:block;font-size:10px;color:var(--muted)}.date b{font-family:Georgia,serif;font-size:28px;font-weight:400;line-height:1.2}.event-title{display:flex;justify-content:space-between;gap:8px;align-items:baseline}.event h2{font-size:14px;font-weight:550;margin:0 0 9px}.tag{font-size:9px;white-space:nowrap;color:var(--green)}.event p{font-size:11px;margin:3px 0;color:#788171}.event .primary{margin-top:18px;min-height:44px;font-size:12px}.empty{font-size:12px;color:var(--muted);padding:22px 0;border-bottom:1px solid var(--line)}
+.settings-section{margin-bottom:34px}.settings-section h2{margin:0;padding-bottom:13px;border-bottom:1px solid var(--line);font-size:11px;color:var(--muted);font-weight:450}.setting{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:19px 0;border-bottom:1px solid var(--line);font-size:13px}.setting strong{font-size:13px;font-weight:500}.setting small{display:block;font-size:10px;margin-top:4px;color:var(--muted)}.outline{min-height:44px;padding:9px 17px;border:1px solid #aab4a5;background:transparent;font-size:11px;white-space:nowrap}.setting input{appearance:none;width:23px;height:23px;margin:10px 2px;border:1px solid #9ca995;background:white;display:grid;place-content:center;cursor:pointer}.setting input:checked{background:var(--green);border-color:var(--green)}.setting input:checked:after{content:'✓';color:white;font-size:15px}.setting label{flex:1;padding:10px 0;font-size:13px;font-weight:400}
+.tabbar{flex-shrink:0;display:grid;grid-template-columns:repeat(3,1fr);background:#fff;border-top:1px solid #d0d6cb;padding:0 0 env(safe-area-inset-bottom)}.tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:58px;background:transparent;border:0;color:#899080;font-size:10px;position:relative}.tab[aria-selected=true]{color:var(--green);background:#edf0e9}.tab[aria-selected=true]:after{content:'';position:absolute;bottom:0;left:calc(50% - 10px);height:2px;width:20px;background:var(--green)}
+[hidden]{display:none!important}@media(min-width:560px){body{padding:24px}.app{height:calc(100dvh - 48px);max-height:900px;min-height:420px;border:1px solid #d6dacf}header{padding-top:22px}}@media(max-width:350px){header{margin:0 18px}.page{padding-left:18px;padding-right:18px}.setting{gap:8px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+
+.month-nav{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}.month-nav h2{font-size:20px;font-weight:500;margin:0;font-variant-numeric:tabular-nums}.month-nav>div{display:flex;gap:2px}.month-button{min-width:40px;min-height:44px;border:0;background:transparent;font-size:20px;padding:5px 8px}.month-button#today{font-size:11px}.weekdays,.calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}.weekdays{text-align:center;font-size:10px;color:var(--muted);padding:8px 0;border-bottom:1px solid var(--line)}.weekdays span:first-child{color:#a56e64}.weekdays span:last-child{color:#71859b}.day{touch-action:manipulation;position:relative;min-width:0;min-height:46px;border:0;border-bottom:1px solid #e3e6de;background:transparent;padding:10px 0 15px;font-size:13px;font-variant-numeric:tabular-nums}.day.outside{color:#abb1a5}.day.today{font-weight:750;text-decoration:underline;text-underline-offset:4px}.day[aria-pressed=true]{background:var(--green);color:#fff}.day.has-events:after{content:'';width:4px;height:4px;background:var(--green);position:absolute;bottom:6px;left:calc(50% - 2px)}.day[aria-pressed=true]:after{background:#fff}.day:focus-visible{outline-offset:-3px;outline-color:#b18a42}.day-event{padding:19px 0;border-bottom:1px solid var(--line);display:grid;grid-template-columns:88px 1fr;gap:12px}.day-event time{font-size:11px;color:var(--green)}.day-event h3{margin:0 0 5px;font-size:14px;font-weight:550;overflow-wrap:anywhere}.day-event p{font-size:11px;color:var(--muted);margin:0;overflow-wrap:anywhere}.add-event{width:100%;margin-top:20px}
+dialog{border:1px solid #bfc6bc;border-radius:0;background:#f7f7f4;color:#252a27;padding:24px;width:calc(100% - 32px);max-width:440px;max-height:calc(100dvh - 32px);overflow-y:auto}dialog::backdrop{background:#17221d66}.dialog-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}.dialog-heading h2{font-size:20px;font-weight:500;margin:0}dialog label{display:block;margin:14px 0 7px}dialog input{display:block;width:100%;min-width:0;max-width:100%;height:46px;padding:9px;border:1px solid #bfc6bc;background:#fff;font-size:16px;appearance:none}.time-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}dialog .primary{margin-top:24px}
+
+</style>
+</head>
+<body>
+<div class="app">
+<header><span class="brand">予定の自動管理アプリ</span><!-- 本番実装時にモック表示を削除する -->
+<span class="edition" data-mock-only>モックアップ</span></header>
+<main class="pages" id="pages">
+<section class="page" id="panel-calendar" role="tabpanel" aria-labelledby="tab-calendar" tabindex="0">
+<div class="month-nav"><h2 id="month-label"></h2><div><button class="month-button" id="prev-month" type="button" aria-label="前の月">‹</button><button class="month-button" id="today" type="button">今日</button><button class="month-button" id="next-month" type="button" aria-label="次の月">›</button></div></div>
+<div class="weekdays" aria-hidden="true"><span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span></div>
+<div class="calendar-grid" id="calendar-grid" role="group" aria-label="日付を選択"></div>
+<div class="section-head"><h2 id="selected-label"></h2><span id="day-count"></span></div>
+<div id="day-events" aria-live="polite"></div>
+<button class="outline add-event" id="add-event" type="button">＋ 予定を追加</button>
+<p class="status" id="calendar-status" role="status"></p>
+</section>
+<section class="page" id="panel-register" role="tabpanel" aria-labelledby="tab-register" tabindex="0" inert>
+<div class="label-row"><label for="message">メッセージ</label><span class="count" id="counter">0 / 2,000</span></div>
+<textarea id="message" maxlength="2000" placeholder="メッセージを貼り付け" spellcheck="false"></textarea>
+<div class="input-actions"><button class="text-button" id="sample" type="button">サンプル入力</button><button class="text-button" id="clear" type="button">クリア</button></div>
+<button class="primary" id="extract" type="button">予定を抽出<span aria-hidden="true">→</span></button>
+<p class="status" id="input-status" role="status"></p>
+<div class="section-head"><h2>連携</h2></div>
+<div class="source"><span>Google カレンダー</span><span id="input-connection">未連携</span></div>
+
+<div class="section-head" id="review-heading"><h2>確認待ち</h2><span id="pending-count">0件</span></div>
+<div class="empty" id="empty">確認待ちの予定なし</div>
+<article class="event" id="pending" hidden><div class="date"><small>10月</small><b>15</b></div><div><div class="event-title"><h2>カフェで打ち合わせ</h2><span class="tag">サンプル</span></div><p>2026.10.15 木曜日</p><p>14:00 — 15:00</p><p>渋谷のカフェ</p><button class="primary" id="register" type="button">登録する<span aria-hidden="true">＋</span></button></div></article>
+<p class="status" id="register-status" role="status"></p>
+</section>
+<section class="page" id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" tabindex="0" inert>
+<section class="settings-section"><h2>アカウント</h2><div class="setting"><div><strong>Google カレンダー</strong><small id="connection-state">未連携</small></div><button class="outline" id="connect" type="button">連携する</button></div><div class="setting"><span>登録先</span><span id="calendar-name">—</span></div></section>
+<section class="settings-section"><h2>予定</h2><div class="setting"><label for="automatic">自動登録</label><input type="checkbox" id="automatic"></div><div class="setting"><span>タイムゾーン</span><span>東京 / JST</span></div></section>
+<section class="settings-section"><h2>アプリ</h2><div class="setting"><span>バージョン</span><span class="count">0.1.0</span></div></section>
+<p class="status" id="settings-status" role="status"></p>
+</section>
+</main>
+<nav class="tabbar" role="tablist" aria-label="画面切り替え">
+<button class="tab" id="tab-calendar" role="tab" aria-selected="true" aria-controls="panel-calendar" tabindex="0" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v16H4ZM8 3v4m8-4v4M4 10h16"/></svg>予定</button>
+<button class="tab" id="tab-register" role="tab" aria-selected="false" aria-controls="panel-register" tabindex="-1" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16M5 15l10-10 4 4L9 19H5v-4ZM13 7l4 4"/></svg>登録</button>
+<button class="tab" id="tab-settings" role="tab" aria-selected="false" aria-controls="panel-settings" tabindex="-1" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16M8 3v6m8 0v6m-6 0v6"/></svg>設定</button>
+</nav>
+</div>
+<dialog id="day-dialog" aria-labelledby="day-dialog-title">
+<div class="dialog-heading"><h2 id="day-dialog-title"></h2><button class="text-button" id="close-day-dialog" type="button" autofocus>閉じる</button></div>
+<div id="day-dialog-events"></div>
+</dialog>
+<dialog id="event-dialog" aria-labelledby="event-dialog-title">
+<form id="event-form">
+<div class="dialog-heading"><h2 id="event-dialog-title">予定を追加</h2><button class="text-button" id="close-dialog" type="button" aria-label="閉じる">閉じる</button></div>
+<label for="event-title">件名</label><input id="event-title" type="text" maxlength="120" required autocomplete="off">
+<label for="event-date">日付</label><input id="event-date" type="date" min="1900-01-01" max="2100-12-31" required>
+<div class="time-fields"><div><label for="event-start">開始</label><input id="event-start" type="time" required value="10:00"></div><div><label for="event-end">終了</label><input id="event-end" type="time" required value="11:00"></div></div>
+<label for="event-location">場所</label><input id="event-location" type="text" maxlength="200" autocomplete="off">
+<p class="status" id="form-status" role="status"></p>
+<button class="primary" type="submit">保存<span aria-hidden="true">＋</span></button>
+</form></dialog>
+<script>
+const $ = id => document.getElementById(id);
+const pages = $('pages');
+const panels = [...document.querySelectorAll('.page')];
+const tabs = [...document.querySelectorAll('.tab')];
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+let active = 0, connected = false, pending = false;
+function sync(index) {
+ if (active !== index) lastTappedDate = null;
+ active = Math.max(0, Math.min(2, index));
+ tabs.forEach((tab, i) => { tab.setAttribute('aria-selected', String(i === active)); tab.tabIndex = i === active ? 0 : -1; });
+ panels.forEach((panel, i) => { panel.inert = i !== active; });
+}
+function navigate(index, focus = false) {
+ index = Math.max(0, Math.min(2, index));
+ if (panels.some(panel => panel.contains(document.activeElement))) document.activeElement.blur();
+ pages.scrollTo({ left: index * pages.clientWidth, behavior: reducedMotion.matches ? 'instant' : 'smooth' });
+ if (focus) tabs[index].focus();
+}
+tabs.forEach((tab, i) => {
+ tab.addEventListener('click', () => navigate(i));
+ tab.addEventListener('keydown', event => {
+  let next = i;
+  if (event.key === 'ArrowRight') next = (i + 1) % 3;
+  else if (event.key === 'ArrowLeft') next = (i + 2) % 3;
+  else if (event.key === 'Home') next = 0;
+  else if (event.key === 'End') next = 2;
+  else return;
+  event.preventDefault(); navigate(next, true);
+ });
+});
+pages.addEventListener('scroll', () => sync(Math.round(pages.scrollLeft / pages.clientWidth)), { passive: true });
+new ResizeObserver(() => { pages.scrollTo({ left: active * pages.clientWidth, behavior: 'instant' }); }).observe(pages);
+function updateInput() {
+ $('counter').textContent = $('message').value.length.toLocaleString('ja-JP') + ' / 2,000';
+ $('input-status').textContent = '';
+}
+$('message').addEventListener('input', updateInput);
+$('sample').addEventListener('click', () => { $('message').value = '10月15日 14時〜15時に、渋谷のカフェで打ち合わせしよう！'; updateInput(); });
+$('clear').addEventListener('click', () => { $('message').value = ''; updateInput(); $('message').focus(); });
+function renderPending() { $('pending').hidden = !pending; $('empty').hidden = pending; $('pending-count').textContent = pending ? '1件' : '0件'; }
+function register() {
+ if (!pending) return;
+ if (!connected) { $('register-status').textContent = 'Google カレンダー未連携'; return; }
+ pending = false; renderPending(); addCalendarEvent(); $('register-status').textContent = '登録済み（モック）';
+}
+$('extract').addEventListener('click', () => {
+ if (!$('message').value.trim()) { $('input-status').textContent = '未入力'; $('message').focus(); return; }
+ pending = true; renderPending(); $('register-status').textContent = '';
+ if ($('automatic').checked) register();
+ $('review-heading').scrollIntoView({ behavior: reducedMotion.matches ? 'instant' : 'smooth', block: 'start' });
+});
+$('register').addEventListener('click', register);
+$('connect').addEventListener('click', () => {
+ connected = !connected;
+ $('connect').textContent = connected ? '解除する' : '連携する';
+ $('connection-state').textContent = connected ? '連携済み（モック）' : '未連携';
+ $('input-connection').textContent = connected ? '連携済み' : '未連携';
+ $('calendar-name').textContent = connected ? 'マイカレンダー' : '—';
+ $('register-status').textContent = '';
+});
+$('automatic').addEventListener('change', () => { $('settings-status').textContent = $('automatic').checked ? '自動登録 ON' : '自動登録 OFF'; });
+
+const dateKey = date => [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
+let lastTappedDate = null;
+let selectedDate = new Date();
+let shownMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+const calendarEvents = [
+ { id: 'lunch', date: '2026-10-12', title: 'チームのランチ', start: '12:00', end: '13:00', location: '駅前レストラン' }
+];
+function renderCalendar() {
+ $('month-label').textContent = shownMonth.getFullYear() + '年 ' + (shownMonth.getMonth() + 1) + '月';
+ $('calendar-grid').replaceChildren();
+ const first = new Date(shownMonth.getFullYear(), shownMonth.getMonth(), 1);
+ const days = new Date(shownMonth.getFullYear(), shownMonth.getMonth() + 1, 0).getDate();
+ const cells = Math.ceil((first.getDay() + days) / 7) * 7;
+ for (let i = 0; i < cells; i++) {
+  const date = new Date(first.getFullYear(), first.getMonth(), i - first.getDay() + 1);
+  const key = dateKey(date), count = calendarEvents.filter(event => event.date === key).length;
+  const button = document.createElement('button');
+  button.type = 'button'; button.className = 'day'; button.textContent = date.getDate(); button.dataset.date = key;
+  button.classList.toggle('outside', date.getMonth() !== shownMonth.getMonth());
+  button.classList.toggle('today', key === dateKey(new Date()));
+  button.classList.toggle('has-events', count > 0);
+  button.setAttribute('aria-pressed', String(key === dateKey(selectedDate)));
+  button.setAttribute('aria-label', date.getFullYear() + '年' + (date.getMonth() + 1) + '月' + date.getDate() + '日、予定' + count + '件');
+  if (key === dateKey(new Date())) button.setAttribute('aria-current', 'date');
+  button.addEventListener('click', () => {
+   const openDetails = lastTappedDate === key;
+   lastTappedDate = openDetails ? null : key;
+   selectedDate = date; shownMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+   $('calendar-status').textContent = ''; renderCalendar();
+   $('calendar-grid').querySelector('[data-date="' + key + '"]').focus({ preventScroll: true });
+   if (openDetails) {
+    $('day-dialog-title').textContent = new Intl.DateTimeFormat('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' }).format(selectedDate);
+    $('day-dialog-events').replaceChildren(...[...$('day-events').children].map(item => item.cloneNode(true)));
+    $('day-dialog').showModal();
+   }
+  });
+  $('calendar-grid').append(button);
+ }
+ renderDay();
+}
+function renderDay() {
+ $('selected-label').textContent = new Intl.DateTimeFormat('ja-JP', { month: 'long', day: 'numeric', weekday: 'long' }).format(selectedDate);
+ const events = calendarEvents.filter(event => event.date === dateKey(selectedDate)).sort((a, b) => a.start.localeCompare(b.start));
+ $('day-count').textContent = events.length + '件';
+ $('day-events').replaceChildren();
+ if (!events.length) {
+  const empty = document.createElement('div'); empty.className = 'empty'; empty.textContent = '予定なし'; $('day-events').append(empty); return;
+ }
+ events.forEach(event => {
+  const article = document.createElement('article'); article.className = 'day-event';
+  const time = document.createElement('time'); time.dateTime = event.date + 'T' + event.start; time.textContent = event.start + ' — ' + event.end;
+  const content = document.createElement('div'), title = document.createElement('h3'), location = document.createElement('p');
+  title.textContent = event.title; location.textContent = event.location;
+  content.append(title, location); article.append(time, content); $('day-events').append(article);
+ });
+}
+function changeMonth(offset) {
+ lastTappedDate = null;
+ shownMonth = new Date(shownMonth.getFullYear(), shownMonth.getMonth() + offset, 1);
+ selectedDate = new Date(shownMonth); $('calendar-status').textContent = ''; renderCalendar();
+}
+$('prev-month').addEventListener('click', () => changeMonth(-1));
+$('next-month').addEventListener('click', () => changeMonth(1));
+$('today').addEventListener('click', () => {
+ lastTappedDate = null;
+ selectedDate = new Date(); shownMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1); $('calendar-status').textContent = ''; renderCalendar();
+});
+function addCalendarEvent() {
+ lastTappedDate = null;
+ if (!calendarEvents.some(event => event.id === 'meeting')) calendarEvents.push({ id: 'meeting', date: '2026-10-15', title: 'カフェで打ち合わせ', start: '14:00', end: '15:00', location: '渋谷のカフェ' });
+ selectedDate = new Date(2026, 9, 15); shownMonth = new Date(2026, 9, 1); renderCalendar();
+}
+$('close-day-dialog').addEventListener('click', () => $('day-dialog').close());
+
+const dayDialog = $('day-dialog');
+let backdropPointerDown = false;
+function outsideDayDialog(event) {
+ const bounds = dayDialog.getBoundingClientRect();
+ return event.clientX < bounds.left || event.clientX > bounds.right ||
+        event.clientY < bounds.top || event.clientY > bounds.bottom;
+}
+dayDialog.addEventListener('pointerdown', event => {
+ backdropPointerDown = event.target === dayDialog && outsideDayDialog(event);
+});
+dayDialog.addEventListener('pointercancel', () => { backdropPointerDown = false; });
+dayDialog.addEventListener('click', event => {
+ if (backdropPointerDown && event.target === dayDialog && outsideDayDialog(event)) dayDialog.close();
+ backdropPointerDown = false;
+});
+dayDialog.addEventListener('close', () => { backdropPointerDown = false; });
+
+$('add-event').addEventListener('click', () => {
+ lastTappedDate = null;
+ $('event-form').reset(); $('event-date').value = dateKey(selectedDate); $('form-status').textContent = '';
+ $('event-dialog').showModal(); $('event-title').focus();
+});
+$('close-dialog').addEventListener('click', () => $('event-dialog').close());
+$('event-form').addEventListener('submit', event => {
+ event.preventDefault();
+ const title = $('event-title').value.trim(), date = $('event-date').value, start = $('event-start').value, end = $('event-end').value;
+ if (!title) { $('form-status').textContent = '件名を入力してください'; $('event-title').focus(); return; }
+ if (!date || !start || !end || end <= start) { $('form-status').textContent = '終了は開始より後にしてください'; $('event-end').focus(); return; }
+ const [year, month, day] = date.split('-').map(Number);
+ const parsedDate = new Date(year, month - 1, day);
+ if (dateKey(parsedDate) !== date || year < 1900 || year > 2100) { $('form-status').textContent = '日付を確認してください'; return; }
+ calendarEvents.push({ id: 'manual-' + (++manualSequence), date, title, start, end, location: $('event-location').value.trim() });
+ selectedDate = parsedDate; shownMonth = new Date(year, month - 1, 1); renderCalendar();
+ $('event-dialog').close(); $('calendar-status').textContent = '保存済み（モック）';
+});
+let manualSequence = 0;
+renderCalendar();
+
+</script>
+</body>
+</html>

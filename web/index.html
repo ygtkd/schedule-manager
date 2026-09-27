@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f7f7f4">
+<title>予定の自動管理アプリ</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+</head>
+<body>
+<div class="app">
+<header><span class="brand">予定の自動管理アプリ</span></header>
+<main class="pages" id="pages">
+<section class="page" id="panel-calendar" role="tabpanel" aria-labelledby="tab-calendar" tabindex="0">
+<p class="status" id="auth-status" role="status"></p>
+<div class="month-nav"><h2 id="month-label"></h2><div><button class="month-button" id="prev-month" type="button" aria-label="前の月">‹</button><button class="month-button" id="today" type="button">今日</button><button class="month-button" id="next-month" type="button" aria-label="次の月">›</button></div></div>
+<div class="weekdays" aria-hidden="true"><span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span></div>
+<div class="calendar-grid" id="calendar-grid" role="group" aria-label="日付を選択"></div>
+<div class="section-head"><h2 id="selected-label"></h2><span id="day-count"></span></div>
+<div id="day-events" aria-live="polite"></div>
+<button class="outline add-event" id="add-event" type="button">＋ 予定を追加</button>
+<p class="status" id="calendar-status" role="status"></p>
+</section>
+<section class="page" id="panel-register" role="tabpanel" aria-labelledby="tab-register" tabindex="0" inert>
+<div class="label-row"><label for="message">メッセージ</label><span class="count" id="counter">0 / 4,000</span></div>
+<textarea id="message" maxlength="4000" placeholder="メッセージを貼り付け" spellcheck="false"></textarea>
+<div class="input-actions"><button class="text-button" id="clear" type="button">クリア</button></div>
+<p class="consent"><label><input type="checkbox" id="ai-consent"> 本文をGeminiに送信する</label></p>
+<button class="primary" id="extract" type="button">予定を抽出<span aria-hidden="true">→</span></button>
+<p class="status" id="input-status" role="status"></p>
+<div class="section-head"><h2>連携</h2></div>
+<div class="source"><span>Google カレンダー</span><span id="input-connection">未連携</span></div>
+
+<div class="section-head" id="review-heading"><h2>処理履歴</h2><button type="button" class="text-button" id="refresh-history">更新</button></div>
+
+<div id="history"></div>
+<p class="status" id="register-status" role="status"></p>
+</section>
+<section class="page" id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" tabindex="0" inert>
+<section class="settings-section"><h2>アカウント</h2><div class="setting"><div><strong>Google カレンダー</strong><small id="connection-state">未連携</small></div><button class="outline" id="connect" type="button">Google連携</button></div><div class="setting"><span>登録先</span><span id="calendar-name">—</span></div></section>
+<section class="settings-section"><h2>LINE</h2><div class="setting"><label for="line-enabled">メッセージ受信</label><input id="line-enabled" type="checkbox"></div><p class="status" id="line-state"></p><a id="line-friend" class="outline" hidden target="_blank" rel="noopener noreferrer">友だち追加</a></section>
+<section class="settings-section"><h2>予定</h2><div class="setting"><label for="automatic">自動登録</label><input type="checkbox" id="automatic"></div><div class="setting"><span>タイムゾーン</span><span>東京 / JST</span></div></section>
+<section class="settings-section"><h2>アプリ</h2><div class="setting"><span>バージョン</span><span class="count">0.1.0</span></div></section>
+<button id="logout" class="outline" type="button" hidden>ログアウト</button>
+<p class="status" id="settings-status" role="status"></p>
+</section>
+</main>
+<nav class="tabbar" role="tablist" aria-label="画面切り替え">
+<button class="tab" id="tab-calendar" role="tab" aria-selected="true" aria-controls="panel-calendar" tabindex="0" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v16H4ZM8 3v4m8-4v4M4 10h16"/></svg>予定</button>
+<button class="tab" id="tab-register" role="tab" aria-selected="false" aria-controls="panel-register" tabindex="-1" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16M5 15l10-10 4 4L9 19H5v-4ZM13 7l4 4"/></svg>登録</button>
+<button class="tab" id="tab-settings" role="tab" aria-selected="false" aria-controls="panel-settings" tabindex="-1" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16M8 3v6m8 0v6m-6 0v6"/></svg>設定</button>
+</nav>
+</div>
+<dialog id="day-dialog" aria-labelledby="day-dialog-title">
+<div class="dialog-heading"><h2 id="day-dialog-title"></h2><button class="text-button" id="close-day-dialog" type="button" autofocus>閉じる</button></div>
+<div id="day-dialog-events"></div>
+</dialog>
+<dialog id="event-dialog" aria-labelledby="event-dialog-title">
+<form id="event-form">
+<div class="dialog-heading"><h2 id="event-dialog-title">予定を追加</h2><button class="text-button" id="close-dialog" type="button" aria-label="閉じる">閉じる</button></div>
+<label for="event-title">件名</label><input id="event-title" type="text" maxlength="120" required autocomplete="off">
+<label for="event-date">日付</label><input id="event-date" type="date" min="1900-01-01" max="2100-12-31" required>
+<div class="time-fields"><div><label for="event-start">開始</label><input id="event-start" type="time" required value="10:00"></div><div><label for="event-end">終了</label><input id="event-end" type="time" required value="11:00"></div></div>
+<label for="event-location">場所</label><input id="event-location" type="text" maxlength="200" autocomplete="off">
+<p class="status" id="form-status" role="status"></p>
+<button class="primary" type="submit">保存<span aria-hidden="true">＋</span></button>
+</form></dialog>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

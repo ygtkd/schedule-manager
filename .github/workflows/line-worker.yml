@@ -1,0 +1,23 @@
+name: Process queued LINE messages
+on:
+  schedule:
+    - cron: '17,47 * * * *'
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: line-worker
+  cancel-in-progress: false
+jobs:
+  process:
+    if: vars.ENABLE_LINE_WORKER == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Process one durable job
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          WORKER_SECRET: ${{ secrets.WORKER_SECRET }}
+        run: |
+          test -n "$APP_URL"
+          test -n "$WORKER_SECRET"
+          curl --fail --silent --show-error --max-time 45 --request POST --header "x-worker-secret: $WORKER_SECRET" "$APP_URL/api/worker"

@@ -1,0 +1,10 @@
+{
+  "name": "schedule-manager-api",
+  "private": true,
+  "version": "0.1.0",
+  "main": "dist/index.js",
+  "scripts": { "build": "tsc", "start": "func start", "test": "npm run build && node --test test/*.test.mjs" },
+  "engines": { "node": ">=22" },
+  "dependencies": { "@azure/functions": "^4.7.0", "@azure/cosmos": "^4.3.0", "google-auth-library": "^9.15.0", "zod": "^3.24.0" },
+  "devDependencies": { "@types/node": "^22.0.0", "typescript": "^5.7.0" }
+}
