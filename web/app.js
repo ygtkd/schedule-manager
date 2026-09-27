@@ -87,7 +87,7 @@ $('event-form').onsubmit=async e=>{
  $('event-dialog').close();status('calendar-status','保存済み');await loadEvents();
  }catch(error){status('form-status',error.message);}finally{button.disabled=false;}
 };
-const labels={pending:'処理待ち',retryable:'再試行待ち',failed:'処理失敗',awaiting_confirmation:'確認待ち',registered:'登録済み',needs_review:'日時の修正が必要',no_event:'予定なし'};
+const labels={cancelled:'取消済み',pending:'処理待ち',retryable:'再試行待ち',failed:'処理失敗',awaiting_confirmation:'確認待ち',registered:'登録済み',needs_review:'日時の修正が必要',no_event:'予定なし'};
 async function history(){
  if(!me){$('history').replaceChildren();return;}
  try{
@@ -120,8 +120,11 @@ function renderAccount(){
  status('connection-state',connected?'連携済み':'未連携');status('input-connection',connected?'連携済み':'未連携');
  status('calendar-name',connected?'マイカレンダー':'—');$('connect').textContent=connected?'連携解除':'Google連携';$('logout').hidden=!me;
  $('automatic').checked=me?.autoRegister||false;$('line-enabled').checked=me?.lineEnabled||false;
- $('automatic').disabled=!me||!me.aiConsent;$('line-enabled').disabled=!me||!me.lineConfigured||!me.aiConsent;
- status('line-state',!me?'Google連携後に設定':!me.lineConfigured?'サーバー設定待ち':me.lineEnabled?'受信中':'停止中');
+ $('automatic').disabled=!me||!me.aiConsent;$('line-enabled').disabled=!me||!me.lineConfigured||!me.lineLinked||!me.aiConsent;
+ status('line-state',!me?'Google連携後に設定':!me.lineConfigured?'サーバー設定待ち':!me.lineLinked?'未連携':me.lineEnabled?'連携済み・受信中':'連携済み・受信停止');
+ $('line-code-button').hidden=!me||!me.lineConfigured;$('line-check').hidden=!me||!me.lineConfigured;
+ $('line-code-button').textContent=me?.lineLinked?'LINE連携を解除':'連携コードを発行';
+ if(!me||me.lineLinked)$('line-code-area').hidden=true;
  $('line-friend').hidden=!me?.lineFriendUrl;if(me?.lineFriendUrl)$('line-friend').href=me.lineFriendUrl;
 }
 async function init(){
@@ -146,3 +149,19 @@ addEventListener('online',init);addEventListener('offline',()=>status('auth-stat
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&me){loadEvents();history();}});
 if('serviceWorker'in navigator)navigator.serviceWorker.register('/service-worker.js').catch(()=>{});
 renderCalendar();init();
+
+$('line-code-button').onclick=async()=>{
+ $('line-code-button').disabled=true;
+ try {
+  if(me.lineLinked){await api('line/unlink',{});me=await api('me');renderAccount();status('settings-status','LINE連携を解除しました');}
+  else{const result=await api('line/code',{});$('line-code-text').value=result.text;$('line-code-area').hidden=false;status('settings-status','この文字列をご自身のLINEから公式アカウントへ送信してください');}
+ }catch(error){status('settings-status',error.message);}finally{$('line-code-button').disabled=false;}
+};
+$('line-check').onclick=async()=>{
+ try{me=await api('me');renderAccount();status('settings-status',me.lineLinked?'LINE連携済み':'未連携です。送信したアカウントとコードの期限を確認してください');}
+ catch(error){status('settings-status',error.message);}
+};
+$('copy-line-code').onclick=async()=>{
+ try{await navigator.clipboard.writeText($('line-code-text').value);status('settings-status','コピーしました');}
+ catch{$('line-code-text').select();status('settings-status','文字列を選択してコピーしてください');}
+};

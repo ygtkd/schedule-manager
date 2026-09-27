@@ -17,3 +17,4 @@ dialog{border:1px solid #bfc6bc;border-radius:0;background:#f7f7f4;color:#252a27
 
 
 .consent{font-size:12px}.consent label{display:flex;align-items:center;gap:8px;min-height:44px}.consent input{width:20px;height:20px}a.outline{display:inline-block;text-decoration:none}#line-state{margin-bottom:16px}.history-row{padding:18px 0;border-bottom:1px solid var(--line);overflow-wrap:anywhere}.history-row h3{font-size:14px;margin:0}.history-row p{font-size:12px;color:var(--muted)}.history-row button{margin-top:8px}
+.line-actions{display:flex;gap:8px;flex-wrap:wrap}.line-actions button{flex:1}#line-code-area{margin:16px 0}#line-code-area input{display:block;width:100%;font-size:16px;padding:10px;margin-top:8px;border:1px solid var(--line)}.legal-links{font-size:12px}.legal-links a{color:var(--green)}

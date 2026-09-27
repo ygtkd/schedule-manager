@@ -1,6 +1,7 @@
 import { app, HttpRequest, HttpResponseInit } from '@azure/functions';
 import { CosmosClient } from '@azure/cosmos';
 import { z } from 'zod';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { OAuth2Client } from 'google-auth-library';
 import { randomBytes, createCipheriv, createDecipheriv, timingSafeEqual } from 'node:crypto';
 import { hash, verifyLine, jsonSchema, validateExtraction, Extracted } from './core.js';
@@ -13,15 +14,25 @@ function env(name: string): string {
 const origin = () => env('APP_ORIGIN');
 let cosmos: CosmosClient | undefined;
 const db = () => (cosmos ||= new CosmosClient(env('COSMOS_CONNECTION'))).database(env('COSMOS_DATABASE')).container(env('COSMOS_CONTAINER'));
-// Personal deployment: one partition, one explicitly allowed Google account and LINE user.
-const pk = 'owner';
-async function read(id: string): Promise<any | undefined> {
-  try { return (await db().item(id, pk).read()).resource; }
+// Every request has an isolated tenant context. Browser data never accepts a tenant from input.
+const SYSTEM = 'system-v2';
+const scope = new AsyncLocalStorage<{ pk: string }>();
+function tenantKey() {
+  const value = scope.getStore()?.pk;
+  if (!value) throw new Error('Missing tenant context');
+  return value;
+}
+function useTenant(pk: string) {
+  if (!/^user-[a-f0-9]{64}$/.test(pk)) throw new PublicError(401, '利用者を確認できません。');
+  scope.getStore()!.pk = pk;
+}
+async function read(id: string, partition = tenantKey()): Promise<any | undefined> {
+  try { return (await db().item(id, partition).read()).resource; }
   catch (error: any) { if (error.code === 404) return undefined; throw error; }
 }
-async function save(value: Record<string, unknown>) { await db().items.upsert({ ...value, pk }); }
-async function create(value: Record<string, unknown>): Promise<boolean> {
-  try { await db().items.create({ ...value, pk }); return true; }
+async function save(value: Record<string, unknown>, partition = tenantKey()) { await db().items.upsert({ ...value, pk: partition }); }
+async function create(value: Record<string, unknown>, partition = tenantKey()): Promise<boolean> {
+  try { await db().items.create({ ...value, pk: partition }); return true; }
   catch (error: any) { if (error.code === 409) return false; throw error; }
 }
 function seal(value: string) {
@@ -44,8 +55,10 @@ function setCookie(name: string, value: string, maxAge: number) {
 }
 async function session(req: HttpRequest, mutation = false) {
   const token = cookie(req, '__Host-session');
-  const row = token ? await read(`session-${hash(token)}`) : undefined;
-  if (!row || row.expires < Date.now() || row.generation !== (await preferences()).generation) throw new PublicError(401, 'Googleでログインしてください。');
+  const row = token ? await read(`session-${hash(token)}`, SYSTEM) : undefined;
+  if (!row || row.expires < Date.now() || typeof row.tenant !== 'string') throw new PublicError(401, 'Googleでログインしてください。');
+  useTenant(row.tenant);
+  if (row.generation !== (await preferences()).generation) throw new PublicError(401, 'Googleでログインしてください。');
   if (mutation && (req.headers.get('origin') !== origin() || req.headers.get('x-csrf-token') !== row.csrf)) {
     throw new PublicError(403, '画面を再読み込みしてください。');
   }
@@ -53,7 +66,7 @@ async function session(req: HttpRequest, mutation = false) {
 }
 class PublicError extends Error { constructor(public status: number, message: string) { super(message); } }
 function route(name: string, methods: ('GET' | 'POST')[], handler: (req: HttpRequest) => Promise<HttpResponseInit>) {
-  app.http(name.replaceAll('/', '-'), { route: name, methods, authLevel: 'anonymous', handler: async req => {
+  app.http(name.replaceAll('/', '-'), { route: name, methods, authLevel: 'anonymous', handler: async req => scope.run({ pk: SYSTEM }, async () => {
     try {
       const result = await handler(req);
       return { ...result, headers: { 'Cache-Control': 'no-store', ...result.headers } };
@@ -64,7 +77,7 @@ function route(name: string, methods: ('GET' | 'POST')[], handler: (req: HttpReq
         headers: { 'Cache-Control': 'no-store' },
         jsonBody: { error: error instanceof PublicError ? error.message : '処理できませんでした。時間をおいて再試行してください。' } };
     }
-  }});
+  }) });
 }
 route('auth/start', ['GET'], async () => {
   const state = randomBytes(32).toString('hex');
@@ -79,33 +92,35 @@ route('auth/callback', ['GET'], async req => {
   if (!state || state !== cookie(req, '__Host-oauth')) throw new PublicError(400, '認証状態が一致しません。');
   const record = await read(`oauth-${hash(state)}`);
   if (!record || record.expires < Date.now()) throw new PublicError(400, '認証をやり直してください。');
-  await db().item(record.id, pk).delete();
+  await db().item(record.id, SYSTEM).delete();
   const client = oauth();
   const { tokens } = await client.getToken({ code: req.query.get('code') || '', codeVerifier: unseal(record.verifier) });
   const ticket = await client.verifyIdToken({ idToken: tokens.id_token || '', audience: env('GOOGLE_CLIENT_ID') });
   const identity = ticket.getPayload();
-  const allowed = process.env.GOOGLE_OWNER_SUB ? identity?.sub === process.env.GOOGLE_OWNER_SUB : !!process.env.GOOGLE_OWNER_EMAIL && identity?.email_verified === true && identity.email?.toLowerCase() === process.env.GOOGLE_OWNER_EMAIL.toLowerCase();
-  if (!allowed) throw new PublicError(403, '許可されたGoogleアカウントではありません。');
+  if (!identity?.sub || identity.email_verified !== true) throw new PublicError(403, 'Googleアカウントを確認できません。');
+  useTenant('user-' + hash(identity.sub));
+  const membership = await read('membership');
   const old = await read('google');
   if (!tokens.refresh_token && !old) throw new PublicError(400, 'Googleのアクセス許可を解除し、再連携してください。');
   await save({ id: 'google', refresh: tokens.refresh_token ? seal(tokens.refresh_token) : old.refresh, ttl: -1 });
+  await save({ id: 'membership', created: membership?.created || new Date().toISOString(), ttl: -1 });
   const token = randomBytes(32).toString('hex');
-  await save({ id: `session-${hash(token)}`, csrf: randomBytes(24).toString('hex'), generation: (await preferences()).generation, expires: Date.now() + 7 * 86400_000, ttl: 604800 });
+  await save({ id: `session-${hash(token)}`, tenant: tenantKey(), csrf: randomBytes(24).toString('hex'), generation: (await preferences()).generation, expires: Date.now() + 7 * 86400_000, ttl: 604800 }, SYSTEM);
   return { status: 302, headers: { Location: '/', 'Set-Cookie': setCookie('__Host-session', token, 604800) } };
 });
 route('me', ['GET'], async req => {
   const row = await session(req);
   return { jsonBody: { connected: !!await read('google'), csrf: row.csrf,
-    aiConsent: process.env.AI_CONSENT === 'true', ...(await preferences()), lineConfigured: !!process.env.LINE_CHANNEL_SECRET && !!process.env.LINE_OWNER_ID, lineFriendUrl: process.env.LINE_FRIEND_URL?.startsWith('https://line.me/') ? process.env.LINE_FRIEND_URL : null } };
+    aiConsent: process.env.AI_CONSENT === 'true', ...(await preferences()), lineConfigured: !!process.env.LINE_CHANNEL_SECRET, lineLinked: !!await lineLink(), lineFriendUrl: process.env.LINE_FRIEND_URL?.startsWith('https://line.me/') ? process.env.LINE_FRIEND_URL : null } };
 });
 route('logout', ['POST'], async req => {
   const row = await session(req, true);
-  await db().item(row.id, pk).delete();
+  await db().item(row.id, SYSTEM).delete();
   return { headers: { 'Set-Cookie': setCookie('__Host-session', '', 0) }, jsonBody: { ok: true } };
 });
 route('history', ['GET'], async req => {
   await session(req);
-  const { resources } = await db().items.query({ query: 'SELECT TOP 30 c.id, c.status, c.event, c.created FROM c WHERE c.pk = @pk AND c.kind = "job" ORDER BY c.created DESC', parameters: [{ name: '@pk', value: pk }] }, { partitionKey: pk }).fetchAll();
+  const { resources } = await db().items.query({ query: 'SELECT TOP 30 c.id, c.status, c.event, c.created FROM c WHERE c.pk = @pk AND c.kind = "job" ORDER BY c.created DESC', parameters: [{ name: '@pk', value: tenantKey() }] }, { partitionKey: tenantKey() }).fetchAll();
   return { jsonBody: resources };
 });
 
@@ -116,10 +131,10 @@ async function reserveBudget() {
   const day = new Date().toISOString().slice(0, 10);
   let reserved = false;
   for (let slot = 0; slot < limit; slot++) {
-    if (await create({ id: `budget-${day}-${slot}`, ttl: 172800 })) { reserved = true; break; }
+    if (await create({ id: `budget-${day}-${slot}`, ttl: 172800 }, SYSTEM)) { reserved = true; break; }
   }
   if (!reserved) throw new PublicError(429, '本日のAI処理上限に達しました。');
-  if (!await create({ id: `minute-${Math.floor(Date.now() / 60000)}`, ttl: 120 })) {
+  if (!await create({ id: `minute-${Math.floor(Date.now() / 60000)}`, ttl: 120 }, SYSTEM)) {
     throw new PublicError(429, 'AI処理は1分に1回までです。少し待って再試行してください。');
   }
 }
@@ -146,7 +161,7 @@ async function calendarInsert(id: string, event: Extracted) {
   const client = oauth();
   client.setCredentials({ refresh_token: unseal(account.refresh) });
   // SHA-256 hex satisfies Google Calendar event ID's base32hex character restrictions.
-  const eventId = hash(`schedule-v1:${id}`);
+  const eventId = hash(`schedule-v2:${tenantKey()}:${id}`);
   try {
     await client.request({ url: 'https://www.googleapis.com/calendar/v3/calendars/primary/events', method: 'POST', timeout: 10000,
       data: { id: eventId, summary: event.title, location: event.location,
@@ -165,7 +180,7 @@ async function processMessage(id: string, text: string, reference: number) {
   }
   if (job.leaseUntil > Date.now()) throw new PublicError(503, '処理中です。少し待って再試行してください。');
   try {
-    const result = await db().item(id, pk).replace({ ...job, leaseUntil: Date.now() + 90000 }, { accessCondition: { type: 'IfMatch', condition: job._etag } });
+    const result = await db().item(id, tenantKey()).replace({ ...job, leaseUntil: Date.now() + 90000 }, { accessCondition: { type: 'IfMatch', condition: job._etag } });
     job = result.resource;
   } catch (error: any) { if (error.code === 412) throw new PublicError(503, '処理中です。'); throw error; }
   try {
@@ -209,11 +224,21 @@ route('webhooks/line', ['POST'], async req => {
   const payload = JSON.parse(raw);
   if (!Array.isArray(payload.events)) throw new PublicError(400, 'Invalid events');
   for (const event of payload.events) {
-    if (event.type !== 'message' || event.message?.type !== 'text' || event.source?.type !== 'user' || event.source.userId !== env('LINE_OWNER_ID')) continue;
+    if (event.type !== 'message' || event.message?.type !== 'text' || event.source?.type !== 'user' || typeof event.source.userId !== 'string') continue;
     if (typeof event.webhookEventId !== 'string' || typeof event.timestamp !== 'number' || typeof event.message.text !== 'string') continue;
     if (event.message.text.length > 4000) continue;
+    const lineKey = 'line-' + hash(event.source.userId);
+    if (/^連携 [a-f0-9]{32}$/.test(event.message.text.trim())) {
+      await acceptLineCode(event.message.text.trim().slice(3), lineKey);
+      continue;
+    }
+    const binding = await read(lineKey, SYSTEM);
+    if (!binding?.tenant) continue;
+    useTenant(binding.tenant);
+    const linked = await lineLink();
+    if (!linked || linked.lineKey !== lineKey || linked.linkId !== binding.linkId) continue;
     if (!(await preferences()).lineEnabled) continue;
-    await create({ id: `line-${hash(event.webhookEventId)}`, kind: 'job', status: 'pending', created: new Date().toISOString(), reference: event.timestamp, fingerprint: hash(event.message.text), message: seal(event.message.text), attempts: 0, nextAttempt: 0, ttl: 2592000 });
+    await create({ id: `line-${hash(event.webhookEventId)}`, kind: 'job', status: 'pending', created: new Date().toISOString(), lineKey, linkId: binding.linkId, reference: event.timestamp, fingerprint: hash(event.message.text), message: seal(event.message.text), attempts: 0, nextAttempt: 0, ttl: 2592000 });
   }
   return { status: 200, jsonBody: { ok: true } };
 });
@@ -229,7 +254,7 @@ async function preferences() {
 route('settings', ['POST'], async req => {
   await session(req, true);
   const changes = z.object({ autoRegister: z.boolean(), lineEnabled: z.boolean() }).strict().parse(await req.json());
-  if (changes.lineEnabled && (!process.env.LINE_OWNER_ID || !process.env.LINE_CHANNEL_SECRET)) throw new PublicError(400, 'LINEのサーバー設定が必要です。');
+  if (changes.lineEnabled && (!process.env.LINE_CHANNEL_SECRET || !await lineLink())) throw new PublicError(400, 'LINEのサーバー設定が必要です。');
   if ((changes.lineEnabled || changes.autoRegister) && process.env.AI_CONSENT !== 'true') throw new PublicError(400, 'AI送信をサーバーで有効にしてください。');
   await save({ id: 'preferences', ...await preferences(), ...changes, ttl: -1 });
   return { jsonBody: { ok: true } };
@@ -278,13 +303,14 @@ route('events/create', ['POST'], async req => {
 });
 route('disconnect', ['POST'], async req => {
   await session(req, true);
+  await unlinkLine();
   const prefs = await preferences();
   // Disable incoming processing and invalidate all existing browser sessions.
   await save({ id: 'preferences', ...prefs, lineEnabled: false, autoRegister: false, generation: prefs.generation + 1, ttl: -1 });
   const account = await read('google');
   if (account) {
     await oauth().revokeToken(unseal(account.refresh)).catch(() => undefined);
-    await db().item('google', pk).delete();
+    await db().item('google', tenantKey()).delete();
   }
   return { headers: { 'Set-Cookie': setCookie('__Host-session', '', 0) }, jsonBody: { ok: true } };
 });
@@ -292,13 +318,19 @@ route('worker', ['POST'], async req => {
   const supplied = Buffer.from(hash(req.headers.get('x-worker-secret') || ''));
   const expected = Buffer.from(hash(env('WORKER_SECRET')));
   if (!timingSafeEqual(supplied, expected)) throw new PublicError(401, 'Unauthorized');
-  if (!(await preferences()).lineEnabled) return { jsonBody: { processed: false } };
   const { resources } = await db().items.query({
-    query: 'SELECT TOP 1 * FROM c WHERE c.pk = @pk AND c.kind = "job" AND IS_DEFINED(c.message) AND (c.status = "pending" OR c.status = "retryable") AND c.nextAttempt <= @now AND (NOT IS_DEFINED(c.leaseUntil) OR c.leaseUntil <= @now) ORDER BY c.created ASC',
-    parameters: [{ name: '@pk', value: pk }, { name: '@now', value: Date.now() }]
-  }, { partitionKey: pk }).fetchAll();
+    query: 'SELECT TOP 1 * FROM c WHERE STARTSWITH(c.pk, "user-") AND c.kind = "job" AND IS_DEFINED(c.message) AND (c.status = "pending" OR c.status = "retryable") AND c.nextAttempt <= @now AND (NOT IS_DEFINED(c.leaseUntil) OR c.leaseUntil <= @now) ORDER BY c.created ASC',
+    parameters: [{ name: '@now', value: Date.now() }]
+  }).fetchAll();
   const job = resources[0];
   if (!job) return { jsonBody: { processed: false } };
+  useTenant(job.pk);
+  const link = await lineLink();
+  if (!(await preferences()).lineEnabled || !await read('google') || !link || link.linkId !== job.linkId || link.lineKey !== job.lineKey) {
+    const { message, ...remaining } = job;
+    await save({ ...remaining, status: 'cancelled' });
+    return { jsonBody: { processed: false } };
+  }
   try {
     await processMessage(job.id, unseal(job.message), job.reference);
     return { jsonBody: { processed: true } };
@@ -315,4 +347,49 @@ route('worker', ['POST'], async req => {
     return { jsonBody: { processed: false, retry: true } };
   }
 });
-route('health', ['GET'], async () => ({ jsonBody: { ok: true, version: '0.1.0' } }));
+route('health', ['GET'], async () => ({ jsonBody: { ok: true, version: '0.2.0' } }));
+
+async function lineLink() { return read('line-user-' + tenantKey(), SYSTEM); }
+async function acceptLineCode(code: string, lineKey: string) {
+  const record = await read('line-code-' + hash(code), SYSTEM);
+  if (!record || record.expires < Date.now() || record.used) return;
+  useTenant(record.tenant);
+  const pending = await read('line-pending');
+  if (!pending || pending.codeHash !== hash(code) || pending.expires < Date.now() || !await read('google')) return;
+  const linkId = hash(code);
+  // Code claim and both lookup directions commit together in the system partition.
+  // Create-only mappings prevent a LINE account from being taken over by another user.
+  const result = await db().items.batch([
+    { operationType: 'Replace', id: record.id, ifMatch: record._etag, resourceBody: { ...record, used: true } },
+    { operationType: 'Create', resourceBody: { id: lineKey, pk: SYSTEM, tenant: tenantKey(), linkId, ttl: -1 } },
+    { operationType: 'Create', resourceBody: { id: 'line-user-' + tenantKey(), pk: SYSTEM, lineKey, linkId, ttl: -1 } }
+  ], SYSTEM);
+  if ((result.code ?? 500) >= 400 && ![409, 412, 424].includes(result.code ?? 500)) throw new Error('LINE link transaction failed');
+}
+async function unlinkLine() {
+  const link = await lineLink();
+  if (!link) return;
+  const result = await db().items.batch([
+    { operationType: 'Replace', id: link.id, ifMatch: link._etag, resourceBody: { ...link, removing: true } },
+    { operationType: 'Delete', id: link.id },
+    { operationType: 'Delete', id: link.lineKey }
+  ], SYSTEM);
+  if ((result.code ?? 500) >= 400) throw new PublicError(409, 'LINE連携の状態を更新してください。');
+}
+route('line/code', ['POST'], async req => {
+  await session(req, true);
+  if (!process.env.LINE_CHANNEL_SECRET) throw new PublicError(400, 'LINEの設定が必要です。');
+  if (await lineLink()) throw new PublicError(409, 'LINEは連携済みです。');
+  const code = randomBytes(16).toString('hex'), expires = Date.now() + 600000;
+  await save({ id: 'line-code-' + hash(code), tenant: tenantKey(), expires, ttl: 600 }, SYSTEM);
+  await save({ id: 'line-pending', codeHash: hash(code), expires, ttl: 600 });
+  return { jsonBody: { text: '連携 ' + code, expires } };
+});
+route('line/unlink', ['POST'], async req => {
+  await session(req, true);
+  await save({ id: 'preferences', ...await preferences(), lineEnabled: false, ttl: -1 });
+  await unlinkLine();
+  const pending = await read('line-pending');
+  if (pending) await db().item('line-pending', tenantKey()).delete();
+  return { jsonBody: { ok: true } };
+});

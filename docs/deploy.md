@@ -26,12 +26,12 @@ Cosmos Free Tierはサブスクリプションごとに1アカウント。既存
 Google CloudでCalendar APIを有効化。Web OAuth clientのredirect URIを
 `https://<SWAホスト>/api/auth/callback` にします。
 scope: openid、email、calendar.events.owned。
-許可するGoogleアカウントはGOOGLE_OWNER_SUBまたはGOOGLE_OWNER_EMAILで固定します。
+Googleアカウントの検証済みsubjectに基づき、利用者ごとに認証情報を保存します。メールアドレスの事前登録は不要です。
 Testing状態のCalendar用refresh tokenは通常7日。長期運用では同意画面の公開・必要な審査に対応します。
 
 LINE公式アカウントでMessaging APIを有効化。
 Webhook: `https://<SWAホスト>/api/webhooks/line`、Webhook利用・再配信を有効化。
-LINE_OWNER_IDは送信者のUser IDです。LINE表示名/検索用IDではありません。
+LINE_OWNER_IDは不要です。各利用者が設定画面で連携コードを発行し、自分のLINEから公式アカウントへ送信して紐付けます。
 返信やPush送信は実装しません。結果はアプリの履歴で確認します。
 
 Google AI StudioでGeminiキーを発行。無料対象でStructured Outputs対応モデルを選択。
@@ -44,13 +44,12 @@ FUNCTIONS_WORKER_RUNTIMEはローカル用でSWAには不要です。
 APP_ORIGINは末尾スラッシュなしの本番URL。
 
 - GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
-- GOOGLE_OWNER_EMAIL（またはGOOGLE_OWNER_SUB）
 - COSMOS_CONNECTION / COSMOS_DATABASE=schedule / COSMOS_CONTAINER=records
 - TOKEN_KEY: 32バイトの暗号学的乱数をBase64化
 - WORKER_SECRET: 32バイト以上の暗号学的乱数
 - GEMINI_API_KEY / GEMINI_MODEL / DAILY_AI_LIMIT
 - AI_CONSENT: データ利用条件に同意後true
-- LINE_CHANNEL_SECRET / LINE_OWNER_ID
+- LINE_CHANNEL_SECRET
 - LINE_FRIEND_URL: 任意。https://line.me/ で始まる友だち追加URL
 
 キー生成例:
@@ -78,7 +77,7 @@ LINE用のscheduleはデフォルトブランチにworkflowがある場合に起
 ## 6. 配備後の確認
 
 1. /api/healthでok、画面にモック表示やサンプル予定がないことを確認。
-2. 設定からGoogleログイン。許可外アカウントは拒否されることを確認。
+2. 設定からGoogleログイン。2つのGoogleアカウントで予定・履歴・設定が分離されることを確認。
 3. 月移動・日付2回タップ・詳細外側で閉じる・手入力がGoogleにも保存されることを確認。
 4. 登録から終了時刻まで明確な本文を送信し、確認後の登録と重複防止を確認。
 5. 設定でLINE受信をON。公式アカウントに送信、履歴に処理待ちが出ることを確認。
@@ -88,3 +87,9 @@ LINE用のscheduleはデフォルトブランチにworkflowがある場合に起
 
 Cloud認証情報が未設定の場合、healthと静的画面以外の動作は完了しません。
 Azureリソース: takeda-resource / schedule-manager。mainへのpushでテスト後に配備します。Azureが生成したリポジトリSecretを利用します。
+
+## Google OAuthの仮公開
+
+Google Auth Platform → 対象（Audience）→ 本番へ公開すると、テストユーザーの事前登録は不要になります。公開状態とGoogleの確認済み状態は別です。Calendarのsensitive scopeでは、未確認のまま警告と100ユーザー上限が適用されます。一般公開に必要なブランド・スコープの審査、ホームページとプライバシーポリシーURL、ドメイン所有確認などに対応してください。
+
+プライバシー説明は /privacy.html です。これは実装のデータ利用説明であり、Googleの審査通過を保証しません。運営連絡先・公開ドメインなど、実際の運用情報を最終確認してください。

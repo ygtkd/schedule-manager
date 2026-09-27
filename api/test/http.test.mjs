@@ -14,7 +14,7 @@ function request(path,method='GET',body,headers={}) {
 }
 test('health endpoint does not require secrets',async()=>{
  const response=await routes.get('health')(request('health'));
- assert.deepEqual(response.jsonBody,{ok:true,version:'0.1.0'});
+ assert.deepEqual(response.jsonBody,{ok:true,version:'0.2.0'});
 });
 test('private endpoints reject unauthenticated requests before DB access',async()=>{
  for(const [path,method] of [['events','GET'],['history','GET'],['events/create','POST'],['settings','POST']]){

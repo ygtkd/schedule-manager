@@ -5,7 +5,6 @@
     "APP_ORIGIN": "https://YOUR-APP.azurestaticapps.net",
     "GOOGLE_CLIENT_ID": "",
     "GOOGLE_CLIENT_SECRET": "",
-    "GOOGLE_OWNER_SUB": "",
     "TOKEN_KEY": "BASE64_ENCODED_32_RANDOM_BYTES",
     "COSMOS_CONNECTION": "",
     "COSMOS_DATABASE": "schedule",
@@ -13,10 +12,8 @@
     "GEMINI_API_KEY": "",
     "GEMINI_MODEL": "gemini-2.5-flash",
     "LINE_CHANNEL_SECRET": "",
-    "LINE_OWNER_ID": "",
     "AI_CONSENT": "false",
     "DAILY_AI_LIMIT": "20",
-    "GOOGLE_OWNER_EMAIL": "",
     "WORKER_SECRET": "",
     "LINE_FRIEND_URL": ""
   }
