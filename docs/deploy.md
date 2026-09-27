@@ -63,7 +63,7 @@ TOKEN_KEY変更時は既存トークンの復号ができなくなるため再�
 
 Repository Settings → Environments → productionを作成。
 productionのSecrets:
-- AZURE_STATIC_WEB_APPS_API_TOKEN: SWAのManage deployment tokenで取得
+- AZURE_STATIC_WEB_APPS_API_TOKEN_GRAY_DESERT_016145400（リポジトリSecret）: SWAのManage deployment tokenで取得
 - WORKER_SECRET: SWAと同じ値
 
 Repository Variables:
@@ -87,4 +87,4 @@ LINE用のscheduleはデフォルトブランチにworkflowがある場合に起
 8. iPhone Safari/Android Chromeからホーム画面追加。再起動・OAuth復帰・オフライン表示を確認。
 
 Cloud認証情報が未設定の場合、healthと静的画面以外の動作は完了しません。
-`ENABLE_AZURE_DEPLOY=true`をRepository Variablesに設定するとAzure配備が有効になります。未設定ではテストのみ実行します。
+Azureリソース: takeda-resource / schedule-manager。mainへのpushでテスト後に配備します。Azureが生成したリポジトリSecretを利用します。
