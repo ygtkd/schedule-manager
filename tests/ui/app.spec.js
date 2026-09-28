@@ -37,5 +37,15 @@ test('unauthenticated users cannot enter manual events',async({page})=>{
  await page.route('**/api/me',route=>route.fulfill({status:401,json:{error:'Googleでログインしてください。'}}));
  await page.goto('/');await page.locator('#add-event').click();
  await expect(page.locator('#event-dialog')).not.toBeVisible();
- await expect(page.locator('#calendar-status')).toContainText('連携');
+ await expect(page.locator('#calendar-status')).toContainText('ログイン');
+});
+
+test('LINE-only account can enter events without Google',async({page})=>{
+ await page.route('**/api/auth/config',route=>route.fulfill({json:{lineLogin:true}}));
+ await page.route('**/api/me',route=>route.fulfill({json:{connected:false,lineLogin:true,csrf:'test',aiConsent:false}}));
+ await page.goto('/');await page.locator('#add-event').click();await expect(page.locator('#event-dialog')).toBeVisible();
+ await page.locator('#close-dialog').click();await page.getByRole('tab',{name:'設定',exact:true}).click();
+ await expect(page.locator('#calendar-name')).toHaveText('アプリ内カレンダー');
+ await expect(page.locator('#line-login')).toHaveText('LINEログイン設定済み');
+ await expect(page.locator('#connect')).toHaveText('Google連携');
 });

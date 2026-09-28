@@ -21,7 +21,7 @@ new ResizeObserver(()=>pages.scrollTo({left:active*pages.clientWidth,behavior:'i
 function dayEvents(){return events.filter(e=>onDay(e,dateKey(selectedDate)));}
 function eventList(container, list) {
  container.replaceChildren();
- if(!list.length){const empty=document.createElement('p');empty.className='empty';empty.textContent=calendarError||(!me?'Googleカレンダーを連携してください':loading?'読み込み中':'予定なし');container.append(empty);return;}
+ if(!list.length){const empty=document.createElement('p');empty.className='empty';empty.textContent=calendarError||(!me?'ログインしてください':loading?'読み込み中':'予定なし');container.append(empty);return;}
  list.forEach(event=>{
  const row=document.createElement('article');row.className='day-event';
  const time=document.createElement('time');time.textContent=eventTime(event);
@@ -73,7 +73,7 @@ function outside(e){const b=dayDialog.getBoundingClientRect();return e.clientX<b
 dayDialog.onpointerdown=e=>{outsideDown=e.target===dayDialog&&outside(e);};dayDialog.onpointercancel=()=>outsideDown=false;
 dayDialog.onclick=e=>{if(outsideDown&&e.target===dayDialog&&outside(e))dayDialog.close();outsideDown=false;};dayDialog.onclose=()=>outsideDown=false;
 $('add-event').onclick=()=>{
- if(!me){status('calendar-status','設定からGoogleカレンダーを連携してください');return;}
+ if(!me){status('calendar-status','設定からログインしてください');return;}
  lastTappedDate=null;manualId=crypto.randomUUID();$('event-form').reset();$('event-date').value=dateKey(selectedDate);status('form-status','');$('event-dialog').showModal();$('event-title').focus();
 };
 $('close-dialog').onclick=()=>$('event-dialog').close();
@@ -109,25 +109,27 @@ $('refresh-history').onclick=history;
 $('message').oninput=()=>{requestId=crypto.randomUUID();status('counter',$('message').value.length.toLocaleString('ja-JP')+' / 4,000');};
 $('clear').onclick=()=>{$('message').value='';$('message').oninput();};
 $('extract').onclick=async()=>{
- if(!me){status('input-status','設定からGoogleカレンダーを連携してください');return;}
+ if(!me){status('input-status','設定からログインしてください');return;}
  if(!$('message').value.trim()||!$('ai-consent').checked){status('input-status','本文とAI送信の同意を確認してください');return;}
  $('extract').disabled=true;status('input-status','抽出中');
  try{const result=await api('messages',{text:$('message').value,requestId});status('input-status',labels[result.status]||result.status);await history();await loadEvents();}
  catch(error){status('input-status',error.message);}finally{$('extract').disabled=false;}
 };
 function renderAccount(){
- const connected=!!me?.connected;status('auth-status',connected?'':'設定からGoogleカレンダーを連携してください');
+ $('line-login').textContent=me?.lineLogin?'LINEログイン設定済み':me?'LINEログインを追加':'LINEでログイン';$('line-login').disabled=!!me?.lineLogin;
+ const connected=!!me?.connected;status('auth-status',me?'':'設定からログインしてください');
  status('connection-state',connected?'連携済み':'未連携');status('input-connection',connected?'連携済み':'未連携');
- status('calendar-name',connected?'マイカレンダー':'—');$('connect').textContent=connected?'連携解除':'Google連携';$('logout').hidden=!me;
+ status('calendar-name',me?(connected?'アプリ ＋ Google':'アプリ内カレンダー'):'—');$('connect').textContent=connected?'連携解除':'Google連携';$('logout').hidden=!me;
  $('automatic').checked=me?.autoRegister||false;$('line-enabled').checked=me?.lineEnabled||false;
  $('automatic').disabled=!me||!me.aiConsent;$('line-enabled').disabled=!me||!me.lineConfigured||!me.lineLinked||!me.aiConsent;
- status('line-state',!me?'Google連携後に設定':!me.lineConfigured?'サーバー設定待ち':!me.lineLinked?'未連携':me.lineEnabled?'連携済み・受信中':'連携済み・受信停止');
+ status('line-state',!me?'ログイン後に設定':!me.lineConfigured?'サーバー設定待ち':!me.lineLinked?'未連携':me.lineEnabled?'連携済み・受信中':'連携済み・受信停止');
  $('line-code-button').hidden=!me||!me.lineConfigured;$('line-check').hidden=!me||!me.lineConfigured;
  $('line-code-button').textContent=me?.lineLinked?'LINE連携を解除':'連携コードを発行';
  if(!me||me.lineLinked)$('line-code-area').hidden=true;
  $('line-friend').hidden=!me?.lineFriendUrl;if(me?.lineFriendUrl)$('line-friend').href=me.lineFriendUrl;
 }
 async function init(){
+ try{const config=await api('auth/config');$('line-login').hidden=!config.lineLogin;}catch{$('line-login').hidden=true;}
  try{me=await api('me');status('settings-status','');}catch(error){me=null;if(error.status!==401)status('settings-status',error.message);}
  renderAccount();await Promise.all([loadEvents(),history()]);
 }
@@ -165,3 +167,5 @@ $('copy-line-code').onclick=async()=>{
  try{await navigator.clipboard.writeText($('line-code-text').value);status('settings-status','コピーしました');}
  catch{$('line-code-text').select();status('settings-status','文字列を選択してコピーしてください');}
 };
+
+$('line-login').onclick=()=>{location.href='/api/auth/line/start';};

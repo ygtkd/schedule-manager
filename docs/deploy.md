@@ -23,7 +23,9 @@ Cosmos Free Tierはサブスクリプションごとに1アカウント。既存
 
 ## 3. Google / LINE / Gemini
 
-Google CloudでCalendar APIを有効化。Web OAuth clientのredirect URIを
+LINEのみで使う場合はGoogle設定を省略できます。[LINEログイン設定](line-login.md)を先に行ってください。
+
+Googleも連携する場合はGoogle CloudでCalendar APIを有効化。Web OAuth clientのredirect URIを
 `https://<SWAホスト>/api/auth/callback` にします。
 scope: openid、email、calendar.events.owned。
 Googleアカウントの検証済みsubjectに基づき、利用者ごとに認証情報を保存します。メールアドレスの事前登録は不要です。
@@ -49,7 +51,8 @@ APP_ORIGINは末尾スラッシュなしの本番URL。
 - WORKER_SECRET: 32バイト以上の暗号学的乱数
 - GEMINI_API_KEY / GEMINI_MODEL / DAILY_AI_LIMIT
 - AI_CONSENT: データ利用条件に同意後true
-- LINE_CHANNEL_SECRET
+- LINE_LOGIN_CHANNEL_ID / LINE_LOGIN_CHANNEL_SECRET（LINEログインチャネルの値）
+- LINE_CHANNEL_SECRET（Messaging APIチャネルの値）
 - LINE_FRIEND_URL: 任意。https://line.me/ で始まる友だち追加URL
 
 キー生成例:
@@ -82,7 +85,7 @@ LINE用のscheduleはデフォルトブランチにworkflowがある場合に起
 4. 登録から終了時刻まで明確な本文を送信し、確認後の登録と重複防止を確認。
 5. 設定でLINE受信をON。公式アカウントに送信、履歴に処理待ちが出ることを確認。
 6. ActionsのProcess queued LINE messagesを手動実行し、抽出・登録を確認。
-7. 自動登録ON/OFF、連携解除で処理が停止することを確認。
+7. 自動登録ON/OFF、LINE受信OFFまたはLINEメッセージ連携解除で処理が停止することを確認。
 8. iPhone Safari/Android Chromeからホーム画面追加。再起動・OAuth復帰・オフライン表示を確認。
 
 Cloud認証情報が未設定の場合、healthと静的画面以外の動作は完了しません。

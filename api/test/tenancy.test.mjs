@@ -26,6 +26,7 @@ const container={
   async upsert(row){return {resource:put(row)};},
   query(spec,options){return {async fetchAll(){
    let result=[...rows.values()].filter(row=>row.pk===(options?.partitionKey||spec.parameters?.find(p=>p.name==='@pk')?.value));
+   if(spec.query.includes('c.kind = "event"'))result=result.filter(row=>row.kind==='event');
    if(spec.query.includes('c.kind = "job"'))result=result.filter(row=>row.kind==='job');
    return {resources:structuredClone(result)};
   }};},
@@ -48,6 +49,7 @@ OAuth2Client.prototype.request=async function(options){
  if(options.method==='POST'){googleWrites.push({owner:this.credentials.refresh_token,event:options.data});return {data:{}};}
  return {data:{items:[{id:this.credentials.refresh_token,summary:this.credentials.refresh_token,start:{date:'2026-10-12'},end:{date:'2026-10-13'}}]}};
 };
+OAuth2Client.prototype.revokeToken=async()=>({});
 const original=app.http;app.http=(name,config)=>routes.set(config.route,config.handler);require('../dist/index.js');app.http=original;
 async function call(path,{method='GET',body,session,headers={}}={}){
  const base=path.split('?')[0];const request=new HttpRequest({url:'https://app.test/api/'+path,method,headers:{...(session?{cookie:'__Host-session='+session.token,origin:'https://app.test','x-csrf-token':session.csrf}:{}),...headers},body:body?{string:JSON.stringify(body)}:undefined});
@@ -92,4 +94,61 @@ test('Public registration, parallel requests, Google writes and LINE links are i
  assert.equal(get('line-'+digest('message-1'),bob.tenant),undefined);
  await call('line/unlink',{method:'POST',session:alice,body:{}});
  assert.equal((await call('me',{session:alice})).jsonBody.lineLinked,false);
+});
+
+process.env.LINE_LOGIN_CHANNEL_ID='line-client';process.env.LINE_LOGIN_CHANNEL_SECRET='login-secret';
+let lineNonce, lineSubject='LINE-LOGIN-NEW', badNonce=false;
+globalThis.fetch=async(url,options)=>{
+ const params=new URLSearchParams(options.body);
+ if(url.endsWith('/token')){assert.ok(params.get('code_verifier'));return {ok:true,json:async()=>({id_token:'signed-token'})};}
+ if(url.endsWith('/verify')){assert.equal(params.get('client_id'),'line-client');assert.equal(params.get('nonce'),lineNonce);return {ok:true,json:async()=>({sub:lineSubject,aud:'line-client',iss:'https://access.line.me',nonce:badNonce?'wrong':lineNonce,exp:Date.now()/1000+600})};}
+ throw Error('Unexpected provider request');
+};
+async function lineLogin(existing){
+ const start=await call('auth/line/start',{session:existing});assert.equal(start.status,302);
+ const url=new URL(start.headers.Location);assert.equal(url.searchParams.get('code_challenge_method'),'S256');
+ const state=url.searchParams.get('state');lineNonce=url.searchParams.get('nonce');
+ const options={headers:{cookie:'__Host-line-oauth='+state+(existing?'; __Host-session='+existing.token:'')}};
+ const callback='auth/line/callback?state='+state+'&code=test';
+ const response=await call(callback,options);
+ return {response,callback,options};
+}
+function sessionFrom(response){
+ assert.equal(response.status,302,JSON.stringify(response.jsonBody));
+ const token=response.headers['Set-Cookie'].split(';')[0].split('=')[1];
+ return {token,...get('session-'+digest(token),system)};
+}
+test('LINE-only login, local calendar, account linking, replay and nonce protection',async()=>{
+ const expired=await call('auth/line/start',{headers:{cookie:'__Host-session=expired'}});assert.equal(expired.status,302);
+ const first=await lineLogin();const user=sessionFrom(first.response);
+ assert.equal((await call(first.callback,first.options)).status,400);
+ assert.equal((await call('auth/line/callback?state=wrong&code=x')).status,400);
+ let me=(await call('me',{session:user})).jsonBody;assert.equal(me.connected,false);assert.equal(me.lineLogin,true);
+ const body={requestId:'eeeeeeee-1234-4234-8234-123456789abc',title:'LINEのみの予定',start:'2026-10-15T14:00:00+09:00',end:'2026-10-15T15:00:00+09:00',location:'東京'};
+ const writes=googleWrites.length;
+ assert.equal((await call('events/create',{method:'POST',session:user,body})).jsonBody.ok,true);
+ await call('events/create',{method:'POST',session:user,body});assert.equal(googleWrites.length,writes);
+ const path='events?from=2026-10-01T00:00:00%2B09:00&to=2026-11-01T00:00:00%2B09:00';
+ const events=(await call(path,{session:user})).jsonBody;assert.equal(events.length,1);assert.equal(events[0].title,body.title);
+ const second=sessionFrom((await lineLogin()).response);assert.equal(second.tenant,user.tenant);
+ badNonce=true;assert.equal((await lineLogin()).response.status,403);badNonce=false;
+ const alice=await login('alice');assert.equal((await lineLogin(alice)).response.status,409);
+ lineSubject='LINE-LOGIN-ALICE';const linked=sessionFrom((await lineLogin(alice)).response);assert.equal(linked.tenant,alice.tenant);
+ assert.equal(sessionFrom((await lineLogin()).response).tenant,alice.tenant);
+ // Add Google to an existing LINE account, preserving its local events and identity.
+ const started=await call('auth/start',{session:user});const state=new URL(started.headers.Location).searchParams.get('state');
+ const google=await call('auth/callback?state='+state+'&code=line-google',{headers:{cookie:'__Host-oauth='+state+'; __Host-session='+user.token}});
+ assert.equal(sessionFrom(google).tenant,user.tenant);
+ assert.equal((await login('line-google')).tenant,user.tenant);
+ assert.equal((await call('disconnect',{method:'POST',session:user,body:{}})).jsonBody.ok,true);
+ assert.equal((await call('me',{session:user})).jsonBody.connected,false);
+ assert.equal((await call(path,{session:user})).jsonBody.length,1);
+ // Confirm an extracted message without a Google refresh token.
+ const date=new Date(Date.now()+2*86400000).toISOString().slice(0,10);
+ put({id:'web-line-confirm',pk:user.tenant,kind:'job',status:'awaiting_confirmation',event:{status:'event',title:'確認する予定',start:date+'T14:00:00+09:00',end:date+'T15:00:00+09:00',location:'',reason:''}});
+ const before=googleWrites.length;
+ assert.equal((await call('confirm',{method:'POST',session:user,body:{id:'web-line-confirm'}})).jsonBody.ok,true);
+ assert.equal(googleWrites.length,before);
+ assert.equal(get('web-line-confirm',user.tenant).status,'registered');
+ assert.equal((await call('line/code',{method:'POST',session:user,body:{}})).jsonBody.text.startsWith('連携 '),true);
 });
